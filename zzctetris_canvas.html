@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title></title>
+<style>
+body{background: url(pic/tetris.jpg); font-family:  Courier, monospace;}
+#gamebox{width:390px; height:570px;  position: absolute; top: 30px; left:50%; margin-left: -195px; overflow:hidden; background: rgba(255,255,255,0.5); box-shadow: 0px 0px 18px #111; transition:all 0.2s;}
+.hitBox{top:45px!important;}
+.block{width:30px; height:30px; background: #555; position: absolute;top:-1000px; letter-spacing: -2px; font-size:4px; transition:all 0.1s;}
+.blockStop{background:#333; color:#fff; line-height: 30px;text-align: center;box-shadow: inset 0px 0px 6px #fefefe; transition:all 0.5s;}
+.blockNext{background: #333; width:20px; height:20px; position: absolute; transition:all 0.5s;}
+#nextBlockCon{width:120px; height:120px; position: absolute; top:30px; left:50%; margin-left: 240px; background: rgba(255,255,255,0.5); box-shadow: 0px 0px 18px #111;}
+#nextBlockBox{width:80px;height:80px; position: absolute; left:20px; top:20px;}
+</style>
+</head>
+<body>
+	<div style="position:absolute; top:10px; left:10px; font-size:120px; font-weight:100; color:rgba(255,255,255,0.9);letter-spacing:-15px;"> tetris</div>
+	<div style="position:absolute; top:200px; left:10px; font-size:80px;  font-weight:100; color:rgba(255,255,255,0.9);letter-spacing:-15px;"> 8/10</div>	
+	<div style="position:absolute; top:300px; left:10px; font-size:60px;  font-weight:100; color:rgba(255,255,255,0.9);letter-spacing:-6px;">version:X.X</div>
+
+	<div id="gamebox">
+		<canvas width="390" height="570" id="cvs"></canvas>
+	</div>
+
+	<div id="nextBlockCon">
+		<div id="nextBlockBox"></div>
+	</div>
+<script>
+	var Block = function(){
+		var blockInfos = [
+			[
+				["00","10","01","02"],
+				["00","01","11","21"],//F
+				["20","21","12","22"],
+				["00","10","20","21"]
+			],
+			[
+				["10","20","21","22"],
+				["01","00","10","20"],//7
+				["12","02","01","00"],
+				["21","22","12","02"]
+			],
+			[
+				["00","01","10","11"],
+				["00","01","10","11"],//D
+				["00","01","10","11"],
+				["00","01","10","11"]
+			],
+			[
+				["10","01","11","21"],
+				["01","10","11","12"],//T
+				["01","11","21","12"],
+				["10","11","12","21"]
+			],
+			[
+				["10","11","12","13"],
+				["02","12","22","32"],//|
+				["13","12","11","10"],
+				["32","22","12","02"]
+			],
+			[
+				["01","11","12","22"],
+				["02","01","11","10"],//Z
+				["22","12","11","01"],
+				["10","11","01","02"]
+			],
+			[
+				["02","12","11","21"],
+				["10","11","21","22"],//s
+				["21","11","12","02"],
+				["22","21","11","10"]
+			]
+		],
+		blockCroodNow = {x:5,y:-4},
+		blockCroodNext = {x:0,y:0},
+		blockFourArr = blockInfos[Math.floor(Math.random()*7)],
+		blockNow = Math.floor(Math.random()*4),
+		blockNext = blockNow;
+		this.rotate = function(){
+			blockNow = ++blockNow%4;
+		}
+
+		this.getNextBlockInfo = function(){
+			return {
+				crood : blockCroodNext,
+				blockArr : blockFourArr[blockNext]
+			}
+		}
+		this.getNowBlockInfo = function(){
+			return {
+				crood : blockCroodNow,
+				blockArr : blockFourArr[blockNow]
+			}
+		}
+
+		this.setNowBlockInfo = function(){
+			blockCroodNow.x = blockCroodNext.x;
+			blockCroodNow.y = blockCroodNext.y;
+			blockNow = blockNext;
+		}				
+
+		this.destoryTry = function(){
+			blockCroodNext.x = blockCroodNow.x;
+			blockCroodNext.y = blockCroodNow.y;
+			blockNext = blockNow;
+		}
+
+		//拿到假设旋转后
+		this.tryRotate = function(){
+			blockCroodNext.x = blockCroodNow.x;
+			blockCroodNext.y = blockCroodNow.y;
+			blockNext = (blockNow+1)%4;
+		}
+		this.tryMove = function(dir){
+			blockNext = blockNow;
+			blockCroodNext.x = blockCroodNow.x;
+			blockCroodNext.y = blockCroodNow.y;
+			switch (dir){
+				case 0://左
+					blockCroodNext.x--;
+					break;
+				case 1://右
+					blockCroodNext.x++;
+					break;
+				case 2://下
+					blockCroodNext.y++;
+					break;
+			}
+		}
+	}
+
+
+	var gameHandler = (function(){
+		var blockDownArr = [],
+			blockMoveEles = [],
+			blockNextEles = [],
+			blockObjNow = null,
+			blockObjNext = null,
+			moveT = 0,
+			handling = false,
+			handCommon = false,
+			converting = false,
+			tallestY = 18,
+			gamebox = document.getElementById("gamebox"),
+			nextBlockBox = document.getElementById("nextBlockBox"),
+			painter = Painter();
+
+
+		function init(){
+			for(var i=0;i<15;i++){
+				blockDownArr[i] = [];
+				for(var j=0;j<20;j++){
+					blockDownArr[i][j] = null;
+				}	
+			}
+			blockObjNext = new Block();
+			createBlock();
+			bindEvent();
+			dropDown();
+		}
+
+		function bindEvent(){
+			document.onkeydown = function(event){
+				var event = event?event:window.event,
+					keyCode = event.keyCode||event.which,
+					location = {};
+					
+				handCommon = true;
+				switch (keyCode){
+					case 38 ://shang
+						blockObjNow.tryRotate();draw();
+						break;
+					case 37 ://zuo
+						blockObjNow.tryMove(0);draw();
+						break;
+					case 39 ://you
+						blockObjNow.tryMove(1);draw();
+						break;
+					case 40 ://xia
+						blockObjNow.tryMove(2);draw();
+						break;
+				}
+			}
+
+		}
+
+		function createBlock(){
+			//alert(blockObjNext.getNowBlockInfo().blockArr)			
+			for(var i=0;i<4;i++){
+				/*blockMoveEles[i] = document.createElement("div");
+				blockMoveEles[i].className = "block";
+				gamebox.appendChild(blockMoveEles[i]);*/
+			}
+			blockObjNow = blockObjNext;
+			blockObjNext = new Block();
+			//alert(blockObjNext.getNowBlockInfo().blockArr)	
+
+			var nextBlockArr =  blockObjNext.getNowBlockInfo().blockArr;
+			for (var i = 3; i >= 0; i--) {
+				if(!blockNextEles[i]){
+					blockNextEles[i] = document.createElement("div");
+					blockNextEles[i].className = "blockNext";
+					nextBlockBox.appendChild(blockNextEles[i]);
+				}
+				blockNextEles[i].style.left = nextBlockArr[i].charAt(0)*20+"px";
+				blockNextEles[i].style.top = nextBlockArr[i].charAt(1)*20+"px";
+			};
+		}
+
+		function draw(){
+			if(converting)return;//转换中，还画个毛
+			if(!allowTransform()){
+				if(!handCommon){
+					blockToNormal();
+				}
+				return;
+			}
+			blockObjNow.setNowBlockInfo();
+
+			var blockLocation = blockObjNow.getNextBlockInfo().crood,
+				blockArr = blockObjNow.getNextBlockInfo().blockArr,
+				stop = false;
+				//console.log(blockArr)
+				//console.log(blockLocation.x+"   "+blockLocation.y)
+			painter.backToRestore();
+			for(var i=0;i<4;i++){
+				var realX = (parseInt(blockLocation.x)+parseInt(blockArr[i].charAt(0)));
+				var realY = (parseInt(blockLocation.y)+parseInt(blockArr[i].charAt(1)));
+				/*blockMoveEles[i].style.left = realX*30+"px";
+				blockMoveEles[i].style.top = realY*30+"px";*/
+				painter.painRect(realX, realY, "#555");
+			}
+		}
+
+		function blockToNormal(){
+			var blockLocation = blockObjNow.getNowBlockInfo().crood,
+				blockArr = blockObjNow.getNowBlockInfo().blockArr,
+				minY = blockLocation.y,
+				maxY = blockLocation.y;
+
+				converting = true;//转换中
+				if(tallestY>minY)
+				tallestY = minY;
+			for(var i=0;i<4;i++){
+				var realX = (parseInt(blockLocation.x) + parseInt(blockArr[i].charAt(0)));
+				var realY = (parseInt(blockLocation.y) + parseInt(blockArr[i].charAt(1)));
+				painter.painRect(realX, realY, "#555");
+				if(!blockDownArr[realX]){
+					blockDownArr[realX]=[];
+				}
+				/*blockMoveEles[i].innerHTML += realX + "-" + realY;*/
+				blockDownArr[realX][realY] = 1;
+
+				if(maxY < (parseInt(minY) + parseInt(blockArr[i].charAt(1)))){
+					maxY = parseInt(minY) + parseInt(blockArr[i].charAt(1));
+				}
+			}
+			//消行
+			for(var i = maxY; i > minY; i--){
+				for(var j = 0; j < 13; j++){
+					if(!blockDownArr[j][i]){
+						break;
+					}
+				}
+				if(j==13){
+					//消
+					for(var k = 0; k < 13; k++){
+						//gamebox.removeChild(blockDownArr[k][i]);
+						//console.log(k+"~~"+i)
+						blockDownArr[k][i] = null;
+					}
+					for(var l = i-1; l >= tallestY; l-- ){
+						for(var m = 0; m < 13; m++){
+							//console.log(m+"~~~"+l)
+							if(!blockDownArr[m][l]) continue;
+							//blockDownArr[m][l].style.top = (l+1)*30+"px";
+							blockDownArr[m][l+1] = blockDownArr[m][l];
+							blockDownArr[m][l] = 0;
+						}
+					}
+					i++;
+					minY++;
+					tallestY++;
+				}
+			}
+
+			painter.clean();
+			for (var x = 0; x < 13; x++) {
+				for (var y = 0; y < 19; y++) {
+					if (blockDownArr[x] && blockDownArr[x][y] == 1) {
+						painter.painRect(x, y, "#333");
+					}
+				}
+			}
+			painter.restore();
+
+			if(tallestY<=0){
+				alert("你是逗比");
+				clearTimeout(moveT);
+				return;
+			}
+			gamebox.className = "hitBox";
+			setTimeout(function(){gamebox.className = ""},350)
+			converting = false;
+			createBlock();
+		}
+
+		function dropDown(){
+			handCommon = false;
+			if(!handling){
+				blockObjNow.tryMove(2);
+				draw();
+			}
+			moveT = setTimeout(arguments.callee,600);
+		}
+		function stop(){
+
+		}
+
+		function allowTransform(){
+			var locationNextTry = blockObjNow.getNextBlockInfo().crood,
+				blockArrNextTry = blockObjNow.getNextBlockInfo().blockArr;
+			for(var i=0;i<4;i++){
+				var realX = (parseInt(locationNextTry.x)+parseInt(blockArrNextTry[i].charAt(0)));
+				var realY = (parseInt(locationNextTry.y)+parseInt(blockArrNextTry[i].charAt(1)));
+				if(realX<0||realX>12){
+					return false;
+				}else if(realY>18){
+					return false;
+				}else if(blockDownArr[realX]&&blockDownArr[realX][realY]){
+					console.log(blockDownArr[realX][realY])
+					console.log(realX+"---"+realY);
+					return false;
+				}
+			}
+			return true;
+		}
+
+		init();
+
+	})();
+
+	function Painter() {
+		var painter = {},
+			cxt = document.getElementById("cvs").getContext("2d"),
+			restoreImage = null;
+		
+
+		painter.clean = function() {
+			cxt.clearRect(0, 0, 390, 570);
+		}
+
+		painter.restore = function() {
+			restoreImage = cxt.getImageData(0, 0, 390, 570);
+		}
+
+		painter.backToRestore = function() {
+			painter.clean();
+			cxt.putImageData(restoreImage, 0, 0);
+		}
+
+		painter.painRect = function(x, y, colorStr) {
+			var edgeWidth = 30;
+			cxt.fillStyle = colorStr;
+			cxt.shadowColor = "#555";
+			cxt.shadowBlur = 6
+			cxt.fillRect(x * edgeWidth, y * edgeWidth, edgeWidth, edgeWidth);
+		}
+
+		painter.restore();
+		return painter
+	};
+
+
+
+
+</script>
+</body>
+</html>
