@@ -2,7 +2,3 @@
 
 
 2048[click to preview](http://htmlpreview.github.io/?https://github.com/zhzhchwin/some-game-practice/blob/master/zzc2048.html)
-
-flappy bird[click to preview](http://htmlpreview.github.io/?https://github.com/zhzhchwin/some-game-practice/blob/master/zzcflappybird.html)
-
-tertris game[click to preview](http://htmlpreview.github.io/?https://github.com/zhzhchwin/some-game-practice/blob/master/zzctetris_3d.html)
